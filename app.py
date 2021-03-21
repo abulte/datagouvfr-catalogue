@@ -67,7 +67,7 @@ def download_has_changed():
     return has_changed
 
 
-@cache.cached(unless=download_has_changed)
+@cache.cached(unless=download_has_changed or app.config.DEBUG)
 def do_update_data():
     # load CSVs into dataframes
     for datum in data:
@@ -75,34 +75,60 @@ def do_update_data():
 
     # compute object creation by year
     df_year = None
+    df_year_no_geo = None
     for datum in data:
         created = datum['date_cols'][0]
         _df = datum['df'].groupby(pd.Grouper(key=created, freq="Y")).count()['id'].rename(datum['id'])
+        if datum['id'] == 'datasets':
+            _df_no_geo = datum['df'][~datum['df']['description'].str.contains('geo.data.gouv.fr', na=False)].groupby(pd.Grouper(key=created, freq="Y")).count()['id'].rename(datum['id'])
+        elif datum['id'] == 'resources':
+            _df_no_geo = datum['df'][~datum['df']['url'].str.contains('files.geo.data.gouv.fr', na=False)].groupby(pd.Grouper(key=created, freq="Y")).count()['id'].rename(datum['id'])
+        else:
+            _df_no_geo = _df
         df_year = _df if df_year is None else pd.merge(df_year, _df, right_index=True, left_index=True)
+        df_year_no_geo = _df_no_geo if df_year_no_geo is None else pd.merge(df_year_no_geo, _df_no_geo, right_index=True, left_index=True)
     fig_year = px.bar(
         df_year, x=df_year.index.year, y=[d['id'] for d in data], 
+        title='Nombre d\'objets créés par an'
+    )
+    fig_year_no_geo = px.bar(
+        df_year_no_geo, x=df_year_no_geo.index.year, y=[d['id'] for d in data], 
         title='Nombre d\'objets créés par an'
     )
 
     # compute object creation by month
     df_month = None
+    df_month_no_geo = None
     start_date = datetime.now() - pd.Timedelta(days=365)
     start_date = start_date.replace(day=1, hour=0, minute=0, second=0)
     for datum in data:
         created = datum['date_cols'][0]
         _df = datum['df'][datum['df'][created] >= start_date].groupby(pd.Grouper(key=created, freq="M")).count()['id'].rename(datum['id'])
+        if datum['id'] == 'datasets':
+            _df_no_geo = datum['df'][~datum['df']['description'].str.contains('geo.data.gouv.fr', na=False)][datum['df'][created] >= start_date].groupby(pd.Grouper(key=created, freq="M")).count()['id'].rename(datum['id'])
+        elif datum['id'] == 'resources':
+            _df_no_geo = datum['df'][~datum['df']['url'].str.contains('files.geo.data.gouv.fr', na=False)][datum['df'][created] >= start_date].groupby(pd.Grouper(key=created, freq="M")).count()['id'].rename(datum['id'])
+        else:
+            _df_no_geo = _df
         df_month = _df if df_month is None else pd.merge(df_month, _df, right_index=True, left_index=True)
+        df_month_no_geo = _df_no_geo if df_month_no_geo is None else pd.merge(df_month_no_geo, _df_no_geo, right_index=True, left_index=True)
     fig_month = px.bar(
         df_month, x=df_month.index.strftime("%Y-%m"), y=[d['id'] for d in data], 
         title='Nombre d\'objets créés dans les 12 derniers mois'
     )
+    fig_month_no_geo = px.bar(
+        df_month_no_geo, x=df_month_no_geo.index.strftime("%Y-%m"), y=[d['id'] for d in data], 
+        title='Nombre d\'objets créés dans les 12 derniers mois'
+    )
 
-    return fig_year, fig_month
+    return fig_year, fig_month, fig_year_no_geo, fig_month_no_geo
+
 
 def serve_layout():
-    fig_year, fig_month = do_update_data()
+    fig_year, fig_month, fig_year_no_geo, fig_month_no_geo = do_update_data()
     return html.Div(children=[
         html.H1(children='Données du catalogue data.gouv.fr'),
+        html.H2(children='Catalogue complet'),
         dcc.Graph(
             id='year',
             figure=fig_year,
@@ -111,6 +137,15 @@ def serve_layout():
             id='month',
             figure=fig_month,
         ),
+        html.H2(children='Catalogue hors geo.data.gouv.fr'),
+        dcc.Graph(
+            id='year_no_geo',
+            figure=fig_year_no_geo,
+        ),
+        dcc.Graph(
+            id='month_no_geo',
+            figure=fig_month_no_geo,
+        ),        
     ])
 
 
