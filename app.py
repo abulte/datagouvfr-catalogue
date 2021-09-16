@@ -45,7 +45,7 @@ data = [
         'id': 'organisations',
         'url': 'https://www.data.gouv.fr/fr/datasets/r/b7bbfedc-2448-4135-a6c7-104548d396e7',
         'date_cols': ['created_at', 'last_modified'],
-    },    
+    },
 ]
 
 
@@ -71,8 +71,13 @@ def download_has_changed():
 def do_update_data():
     # load CSVs into dataframes
     for datum in data:
-        datum['df'] = pd.read_csv(datum['filepath'], delimiter=';', parse_dates=datum['date_cols'])
-
+        datum['df'] = pd.read_csv(
+            datum['filepath'],
+            delimiter=';',
+            parse_dates=datum['date_cols'],
+            # handles out of bound dates https://stackoverflow.com/a/37226672
+            date_parser=lambda col: pd.to_datetime(col, errors='coerce')
+        )
     # compute object creation by year
     df_year = None
     df_year_no_geo = None
@@ -88,11 +93,11 @@ def do_update_data():
         df_year = _df if df_year is None else pd.merge(df_year, _df, right_index=True, left_index=True)
         df_year_no_geo = _df_no_geo if df_year_no_geo is None else pd.merge(df_year_no_geo, _df_no_geo, right_index=True, left_index=True)
     fig_year = px.bar(
-        df_year, x=df_year.index.year, y=[d['id'] for d in data], 
+        df_year, x=df_year.index.year, y=[d['id'] for d in data],
         title='Nombre d\'objets créés par an'
     )
     fig_year_no_geo = px.bar(
-        df_year_no_geo, x=df_year_no_geo.index.year, y=[d['id'] for d in data], 
+        df_year_no_geo, x=df_year_no_geo.index.year, y=[d['id'] for d in data],
         title='Nombre d\'objets créés par an'
     )
 
@@ -113,11 +118,11 @@ def do_update_data():
         df_month = _df if df_month is None else pd.merge(df_month, _df, right_index=True, left_index=True)
         df_month_no_geo = _df_no_geo if df_month_no_geo is None else pd.merge(df_month_no_geo, _df_no_geo, right_index=True, left_index=True)
     fig_month = px.bar(
-        df_month, x=df_month.index.strftime("%Y-%m"), y=[d['id'] for d in data], 
+        df_month, x=df_month.index.strftime("%Y-%m"), y=[d['id'] for d in data],
         title='Nombre d\'objets créés dans les 12 derniers mois'
     )
     fig_month_no_geo = px.bar(
-        df_month_no_geo, x=df_month_no_geo.index.strftime("%Y-%m"), y=[d['id'] for d in data], 
+        df_month_no_geo, x=df_month_no_geo.index.strftime("%Y-%m"), y=[d['id'] for d in data],
         title='Nombre d\'objets créés dans les 12 derniers mois'
     )
 
@@ -145,7 +150,7 @@ def serve_layout():
         dcc.Graph(
             id='month_no_geo',
             figure=fig_month_no_geo,
-        ),        
+        ),
     ])
 
 
